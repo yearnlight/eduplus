@@ -22,6 +22,7 @@
             <span class="el-icon-setting" v-on:click="openConfig()"></span>
             <el-tooltip>
         </span>
+        <el-avatar :src="avatarUrl"></el-avatar>
       </el-header>
       <el-container>
         <el-tree @node-expand="handExpand" @node-collapse="handCollapse" v-if="!isLogs" :data="data" :props="defaultProps" @node-click="handleNoteClick"
@@ -109,6 +110,20 @@
     el: '#app',
     data() {
       return {
+        avatarUrl:"",
+        avatars:[
+          "/lib/avatar/elephant.png",
+          "/lib/avatar/unicorn.png",
+          "/lib/avatar/monkey.png",
+          "/lib/avatar/fox.png",
+          "/lib/avatar/panda.png",
+          "/lib/avatar/rabbit.png",
+          "/lib/avatar/penguin.png",
+          "/lib/avatar/cat.png",
+          "/lib/avatar/dinosaur.png",
+          "/lib/avatar/dog.png",
+          "/lib/avatar/butterfly.png"
+        ],
         data: [],
         rootPath: '',
         defaultProps: {
@@ -139,6 +154,7 @@
     },
     created() {
       this.initHome();
+      this.avatarUrl = this.avatars[Math.floor(Math.random()*11)]
     },
     mounted() {
       hljs.initHighlightingOnLoad();
@@ -424,6 +440,8 @@
     display: flex;
     margin-left: auto;
     align-items: center;
+    margin-right: 20px;
+    font-size: 16px;
   }
 
   .operate-btns>[class^='el-'] {
@@ -475,6 +493,9 @@
     flex: 1;
     align-self: baseline;
     padding-right: 10px;
+    font-size: 16px;
+    height: 100%;
+    overflow-y: auto;
   }
 
   .hljs {
