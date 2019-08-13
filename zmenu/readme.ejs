@@ -24,10 +24,10 @@
         </span>
       </el-header>
       <el-container>
-        <el-tree v-if="!isLogs" :data="data" :props="defaultProps" @node-click="handleNoteClick"
+        <el-tree @node-expand="handExpand" @node-collapse="handCollapse" v-if="!isLogs" :data="data" :props="defaultProps" @node-click="handleNoteClick"
           highlight-current="true" node-key="id" :default-expanded-keys="expandIds">
-          <span class="custom-tree-node" class="{'node-active':activelds.includes(data.id)}" slot-scope="{node, data}">
-            <span :class="{'el-icon-document':data.isfile,'el-icon-message':!data.isfile}"></span>
+          <span class="custom-tree-node" :class="{'node-active':activeIds.includes(data.id)}" slot-scope="{node, data}">
+            <span :class="{'el-icon-document':data.isfile,'el-icon-folder':!data.isfile && !data.isExpand,'el-icon-folder-opened':!data.isfile && data.isExpand}"></span>
             <span>{{data.name}}</span>
           </span>
         </el-tree>
@@ -144,6 +144,12 @@
       hljs.initHighlightingOnLoad();
     },
     methods: {
+      handExpand(item){
+        item.isExpand = true;
+      },
+      handCollapse(item){
+        item.isExpand = false;
+      },
       initHome() {
         this.getHomeData().then(() => {
           this.fileForm = this.data[0];
