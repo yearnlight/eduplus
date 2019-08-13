@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title> <%= title %> </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="stylesheet" type="text/css" media="screen" href="/lib/elementui/index.css">
+  <link rel="stylesheet" type="text/css" media="screen" href="/lib/solarized-light.css">
+</head>
+
+<body>
+  <div id="app">
+    <el-container>
+      <el-header> <%= title %> <span class="operate-btns">
+          <el-tooltip class="item" effect="dark" :content="isLogs?'首页':'日志'" placement="bottom">
+            <span v-on:click="switchContent()" :class="{'el-icon-tickets':isLogs,'el-icon-menu':!isLogs}"></span>
+          </el-tooltip>
+          <el-tooltip class="item" effect="dark" content="配置" placement="bottom">
+            <span class="el-icon-setting" v-on:click="openConfig()"></span>
+            <el-tooltip>
+        </span>
+      </el-header>
+      <el-container>
+        <el-tree v-if="!isLogs" :data="data" :props="defaultProps" @node-click="handleNoteClick"
+          highlight-current="true" node-key="id" :default-expanded-keys="expandIds">
+          <span class="custom-tree-node" class="{'node-active':activelds.includes(data.id)}" slot-scope="{node, data}">
+            <span :class="{'el-icon-document':data.isfile,'el-icon-message':!data.isfile}"></span>
+            <span>{{data.name}}</span>
+          </span>
+        </el-tree>
+        <div v-if="!isLogs" class="fileManage">
+          <el-form mode="fileForm" rules="rules" ref="fileForm" label-width="100px" class="fileForm">
+            <el-form-item label="文件名称" prop="name">
+              <el-input size="small" :readonly="true" v-model="fileForm.name"></el-input>
+            </el-form-item>
+            <el-form-item label="文件路径" prop="path">
+              <el-input size="small" :readonly="true" v-model="fileForm.path"></el-input>
+            </el-form-item>
+            <el-form-item label="文件行数" prop="count">
+              <el-input size="small" :readonly="true" v-model="fileForm.count"></el-input>
+            </el-form-item>
+            <el-form-item label="注释率" prop="noteRate">
+              <el-progress :percentage="fileForm.noteRate"></el-progress>
+            </el-form-item>
+            <el-form-item label="类型" prop="isfile">
+              <el-radio-group v-model="fileForm.isfile">
+                <el-radio :disabled="true" :label="false"><span class="el-icon-message"></span>文件夹</el-radio>
+                <el-radio :disabled="true" :label="true"><span class="el-icon-document"></span>文件</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="创建时间" prop="createTime">
+              <el-input size="small" v-model="fileForm.createTime"></el-input>
+            </el-form-item>
+            <el-form-item label="创建者" prop="author">
+              <el-input size="small" v-model="fileForm.author">
+                <el-input>
+            </el-form-item>
+            <el-form-item label="备注" prop="remark">
+              <el-input size="small" v-model="fileForm.remark">
+                <el-input>
+            </el-form-item>
+            <el-form-item v-if="fileForm.isfile">
+              <el-button size="small" type="primary" @click="save(fileForm)">保存</el-button>
+              <el-button size="small" @click="reset(fileForm)">重置</el-button>
+            </el-form-item>
+          </el-form>
+          <div v-highlight class="fileContent" v-if="!isDir">
+            <img :src="fileContent" style="max-width:100%;max-height:100%" v-if="isImg" />
+            <pre v-else>
+                <code v-html="fileContent"></code>
+            </pre>
+          </div>
+          <div style="flex:1" v-if="isDir"></div>
+        </div>
+        <div v-if="isLogs" class="logs">
+          <div class="logs-tree">
+            <h3>项目目录树</h3>
+            <div v-html="logsHtml" class="logs-tree-content"></div>
+          </div>
+          <div class="logs-md">
+            <h3 class="logs-md-title">{{isPreMd?'预览':'编辑'}}项目README. md文档</h3>
+            <el-input v-if="!isPreMd" type="textarea" v-model="logsMd"></el-input>
+            <div class="logs-md-html" v-if="isPreMd" v-html="logsMdHtml"></div>
+            <div class="logs-md-operate">
+              <el-button size="small" type="warning" @click="preMd()">{{isPreMd?'编辑':'预览'}}</el-button>
+              <el-button size="small" type="primary" @click="saveMd()">保存</el-button>
+            </div>
+          </div>
+        </div>
+      </el-container>
+    </el-container>
+  </div>
+</body>
+<script src="/lib/vue.min.js"></script>
+<script src="/lib/elementui/index.js"></script>
+<script src="/lib/axios.min.js"></script>
+<script src="/lib/highlight.pack.min.js"></script>
+<script>
+  Vue.directive("highlight", el => {
+    let blocks = el.querySelectorAll('pre code');
+    blocks.forEach(block => {
+      hljs.highlightBlock(block);
+    });
+  });
+  new Vue({
+    el: '#app',
+    data() {
+      return {
+        data: [],
+        rootPath: '',
+        defaultProps: {
+          children: 'children',
+          label: 'name'
+        },
+        expandIds: ['0'],
+        activeIds: ['0'],
+        fileForm: {
+          idfile: false
+        },
+        configForm: {},
+        originalFileForm: {},
+        rules: {},
+        logsHtml: '',
+        logsMd: '',
+        logsMdHtml: '',
+        isPreMd: false,
+        isLogs: false,
+        isDir: true,
+        dircount: 0,
+        dirNoteCount: 0,
+        isConfig: false,
+        fileContent: '',
+        selectedFilePath: '',
+        isImg: false
+      }
+    },
+    created() {
+      this.initHome();
+    },
+    mounted() {
+      hljs.initHighlightingOnLoad();
+    },
+    methods: {
+      initHome() {
+        this.getHomeData().then(() => {
+          this.fileForm = this.data[0];
+          this.getFilesCount(this.fileForm.children);
+          this.getFilesNoteCount(this.fileForm.children);
+          this.fileForm.count = this.dircount;
+          this.fileForm.noteRate = ((this.dirNoteCount / this.dircount) * 100).toFixed(2);
+          this.originalFileForm = this.deepClone(this.fileForm)
+        });
+      },
+      getHomeData() {
+        let promise = axios.get('/home/data').then(res => {
+          if (res.data && res.data.code == 1) {
+            this.data = res.data.result.treeData;
+            this.rootPath = res.data.result.rootPath;
+          } else {
+            this.$message.error('查询失败');
+          }
+        })
+        return promise;
+      },
+      deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+      },
+      handleNoteClick(item) {
+        this.activeIds = [];
+        this.selectedFilePath = "";
+        let ids = this.getParentNodeIds(item.id);
+        this.activeIds = this.activeIds.concat(ids);
+        this.fileForm = item;
+        //备份
+        this.originalFileForm = this.deepClone(this.fileForm);
+        if (!item.isfile) {
+          this.isDir = true;
+          this.dircount = 0;
+          this.dirNoteCount = 0;
+          //统计行数
+          this.getFilesCount(item.children);
+          this.getFilesNoteCount(item.children);
+          item.count = this.dircount;
+          item.noteCount = this.dirNoteCount;
+          item.noteRate = ((this.dirNoteCount / this.dircount) * 100).toFixed(2);
+        } else {
+          this.isDir = false;
+          this.selectedFilePath = item.path;
+          this.getFileContent();
+        }
+      },
+      getFileContent() {
+        this.fileContent = "";
+        axios.post('/file/content', {
+          path: this.selectedFilePath
+        }).then(res => {
+          if (res.data.code == 1) {
+            if (/(.*)\.(jpg|bmp|gif|ico|pcx|jpeg|tif|png|raw|tga|webp)$/.test(this.selectedFilePath)) {
+              this.fileContent = res.data.result;
+              this.isImg = true;
+            } else {
+              this.isImg = false;
+              let f = res.data.result.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g,
+                '&gt;').replace(/\"/g, '&quot;').replace(/\'/g, '&#39;').replace(/\n/g, '<br>').replace(
+                  /\s/g, '&nbsp;');
+              this.fileContent = f;
+            }
+          } else {
+            this.isImg = false;
+          }
+        })
+      },
+      getParentNodeIds(id) {
+        let res = [];
+        for (let i = 0; i < id.length; i++) {
+          let partId = id.substr(0, id.length - i);
+          if (partId) {
+            res.push(partId);
+          } else {
+            break;
+          }
+        }
+        return res;
+      },
+      getFilesCount(files) {
+        if (files && files.length) {
+          files.forEach(item => {
+            if (item.isfile) {
+              this.dircount += item.count;
+            } else {
+              this.getFilesCount(item.children);
+            }
+          })
+        }
+      },
+      getFilesNoteCount(files) {
+        if (files && files.length) {
+          files.forEach(item => {
+            if (item.isfile) {
+              this.dirNoteCount += item.noteCount;
+            } else {
+              this.getFilesNoteCount(item.children);
+            }
+          })
+        }
+      },
+      reset() {
+        this.fileForm = this.deepClone(this.originalFileForm);
+      },
+      save() {
+        axios.post('/remark/save', this.fileForm).then(res => {
+          if (res.data && res.data.code == 1) {
+            this.$message.success(res.data.msg);
+            this.getFileContent();
+          } else {
+            this.$message.error("保存失败");
+          }
+        })
+      },
+      saveMd() {
+        axios.post('/logs/saveMd', {
+          content: this.logsMd
+        }).then(res => {
+          if (res.data && res.data.code == 1) {
+            this.$message.success(res.data.msg || "保存成功");
+          } else {
+            this.$message.error("保存失败");
+          }
+        })
+      },
+      preMd() {
+        this.isPreMd = !this.isPreMd;
+        if (this.isPreMd) {
+          axios.post('/logs/mdtohtml', {
+            content: this.logsMd
+          }).then(res => {
+            if (res.data && res.data.code == 1) {
+              this.logsMdHtml = res.data.result;
+            } else {
+              this.$message.error("预览失败")
+            }
+          })
+        }
+      },
+      getLogs() {
+        axios.get('/logs/data').then(res => {
+          if (res.data && res.data.code == 1) {
+            this.logsHtml = res.data.result;
+          } else {
+            this.logsHtml = "暂无数据";
+          }
+        })
+        axios.get('/logs/md').then(res => {
+          if (res.data && res.data.code == 1) {
+            this.logsMd = res.data.result;
+          } else {
+            this.logsMd = "";
+          }
+        })
+      },
+      switchContent() {
+        this.isLogs = !this.isLogs;
+        if (this.isLogs) {
+          this.getLogs();
+        } else {
+          this.isDir = true;
+        }
+      },
+      openConfig() {
+        this.isConfig = true;
+        let temp = this.rootPath.split("\\");
+        this.configForm.path = "";
+      },
+      saveConfig() {
+        axios.post('/config/save', this.configForm).then(res => {
+          this.isConfig = false;
+          if (res.data && res.data.code == 1) {
+            if (this.isLogs) {
+              this.getLogs();
+            } else {
+              this.initHome();
+              this.expandIds = ["0"];
+              this.activeIds = ["0"];
+              this.$message.success(res.data.msg || "保存成功");
+            }
+          } else {
+            this.$message.error(res.data.msg || "保存失败");
+          }
+        })
+      }
+    }
+  })
+
+</script>
+<style>
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-size: 14px;
+  }
+
+  #app {
+    font-family: "Avenir", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color: #2c3e50;
+    height: 100%;
+  }
+
+  #app>.el-container.is-vertical {
+    height: 100%;
+  }
+
+  .el-container {
+    height: calc(100% - 60px);
+  }
+
+  .el-container.is-vertical>.el-header {
+    background: linear-gradient(to left, #7b4397, #2196f3);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+  }
+
+  .node-active {
+    color: #2196f3;
+  }
+
+  .logs {
+    height: calc(100% - 60px);
+    display: flex;
+    width: 100%;
+    padding: 20px;
+  }
+
+  .logs-tree {
+    flex: 1;
+    margin: 0 10px;
+  }
+
+  .logs-tree>.logs-tree-content {
+    height: calc(100% - 54px);
+    overflow: auto;
+  }
+
+  .logs-md {
+    flex: 1;
+    margin: 0 10px;
+    overflow: hidden;
+  }
+
+  .logs-md-operate,
+  .logs-md-title {
+    text-align: center;
+  }
+
+  .logs-md>.el-textarea,
+  .logs-md .el-textarea__inner,
+  .logs-md .logs-md-html {
+    height: calc(100% - 100px);
+    width: 100%;
+    overflow-y: auto;
+  }
+
+  .logs-dir {
+    text-align: left;
+    color: #b1b23f;
+    padding: 1px 0;
+  }
+
+  .operate-btns {
+    display: flex;
+    margin-left: auto;
+    align-items: center;
+  }
+
+  .operate-btns>[class^='el-'] {
+    margin: 0 10px;
+    cursor: pointer;
+  }
+
+  .logs-file {
+    text-align: left;
+    color: #02bc02;
+    padding: 1px 0;
+  }
+
+  .el-tree {
+    overflow-y: auto;
+    flex: 0 0 auto;
+    width: 250px;
+    border-right: 1px solid #dcdfe6;
+  }
+
+  .el-input__inner,
+  .el-button,
+  .el-textarea__inner {
+    border-radius: 0;
+    resize: none;
+  }
+
+  .el-progress {
+    line-height: inherit;
+  }
+
+  .el-progress-bar {
+    width: 98%;
+  }
+
+  input[readonly] {
+    color: #999;
+  }
+
+  .fileManage {
+    width: calc(100% - 351px);
+    padding: 50px;
+    display: flex;
+    align-self: baseline;
+    height: calc(100% - 100px);
+  }
+
+  .fileForm {
+    flex: 1;
+    align-self: baseline;
+    padding-right: 10px;
+  }
+
+  .hljs {
+    font-family: "Avenir", Helvetica, Arial, sans-serif;
+  }
+
+  .fileContent {
+    flex: 1;
+    border: 1px solid #dcdfe6;
+    padding-left: 10px;
+    height: 100%;
+    overflow: auto;
+  }
+
+  .fileForm>.el-form-item {
+    width: 90%;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    box-shadow: inset 0 0 rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    background-color: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: inset 0 0 rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 0 rgba(0, 0, 0, 0.3);
+    background-color: hsla(220, 4%, 58%, 0.3);
+  }
+</style>
+
+</html>
